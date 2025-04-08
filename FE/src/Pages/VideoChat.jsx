@@ -1,55 +1,60 @@
 import React, { useEffect, useRef, useState } from "react";
-import { io } from "socket.io-client";
+import { useLocation, useNavigate } from "react-router-dom";
+import { v4 as uuidv4 } from "uuid";
+import io from "socket.io-client";
 
 const socket = io("http://localhost:5000");
 
-const VideoChat = ({ roomId, username }) => {
-  const localVideoRef = useRef();
-  const remoteVideoRef = useRef();
-  const peerRef = useRef();
-  const localStreamRef = useRef();
-  const screenTrackRef = useRef();
+const MeetRoom = () => {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const queryParams = new URLSearchParams(location.search);
+  const incomingRoomID = queryParams.get("roomID");
 
+  const localVideoRef = useRef(null);
+  const remoteVideoRef = useRef(null);
+  const peerRef = useRef(null);
+  const localStreamRef = useRef(null);
+
+  const [roomId, setRoomId] = useState(incomingRoomID || uuidv4());
+  const [shareableLink, setShareableLink] = useState("");
+  const [cameraOn, setCameraOn] = useState(true);
   const [micOn, setMicOn] = useState(true);
-  const [camOn, setCamOn] = useState(true);
-  const [sharingScreen, setSharingScreen] = useState(false);
 
   useEffect(() => {
-    navigator.mediaDevices.getUserMedia({ video: true, audio: true }).then((stream) => {
-      localVideoRef.current.srcObject = stream;
+    setShareableLink(`${window.location.origin}/call?roomID=${roomId}`);
+
+    if (incomingRoomID) {
+      startMeeting();
+    }
+  }, [roomId]);
+
+  const startMeeting = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
       localStreamRef.current = stream;
+      localVideoRef.current.srcObject = stream;
 
-      socket.emit("join-room", {
-        roomId,
-        userId: socket.id,
-        username: username || "Guest",
-      });
-    });
+      socket.emit("join-room", roomId);
 
-    socket.on("user-connected", ({ socketId }) => handleUserJoined(socketId));
-    socket.on("offer", handleOffer);
-    socket.on("answer", handleAnswer);
-    socket.on("ice-candidate", handleNewICECandidateMsg);
+      socket.on("user-joined", handleUserJoined);
+      socket.on("offer", handleOffer);
+      socket.on("answer", handleAnswer);
+      socket.on("ice-candidate", handleNewICECandidateMsg);
+    } catch (err) {
+      console.error("Error accessing media devices:", err);
+      alert("Please allow access to your camera and microphone.");
+    }
+  };
 
-    return () => {
-      socket.disconnect();
-      if (peerRef.current) peerRef.current.close();
-      if (localStreamRef.current) {
-        localStreamRef.current.getTracks().forEach((track) => track.stop());
-      }
-    };
-  }, [roomId, username]);
-
-  const handleUserJoined = (id) => {
+  const handleUserJoined = async (id) => {
     const peer = createPeer(id);
-    localStreamRef.current.getTracks().forEach((track) => peer.addTrack(track, localStreamRef.current));
     peerRef.current = peer;
+    localStreamRef.current.getTracks().forEach(track => peer.addTrack(track, localStreamRef.current));
   };
 
   const createPeer = (userIdToCall) => {
-    const peer = new RTCPeerConnection({
-      iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
-    });
+    const peer = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
 
     peer.onicecandidate = (e) => {
       if (e.candidate) {
@@ -58,34 +63,25 @@ const VideoChat = ({ roomId, username }) => {
     };
 
     peer.ontrack = (e) => {
-      if (remoteVideoRef.current) {
-        remoteVideoRef.current.srcObject = e.streams[0];
-      }
+      remoteVideoRef.current.srcObject = e.streams[0];
     };
 
-    peer
-      .createOffer()
-      .then((offer) => {
-        peer.setLocalDescription(offer);
-        socket.emit("offer", { to: userIdToCall, offer });
-      })
-      .catch((err) => console.error("Error creating offer:", err));
+    peer.createOffer().then((offer) => {
+      peer.setLocalDescription(offer);
+      socket.emit("offer", { to: userIdToCall, offer });
+    });
 
     return peer;
   };
 
   const handleOffer = async ({ from, offer }) => {
-    const peer = new RTCPeerConnection({
-      iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
-    });
+    const peer = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
     peerRef.current = peer;
 
-    localStreamRef.current.getTracks().forEach((track) => peer.addTrack(track, localStreamRef.current));
+    localStreamRef.current.getTracks().forEach(track => peer.addTrack(track, localStreamRef.current));
 
     peer.ontrack = (e) => {
-      if (remoteVideoRef.current) {
-        remoteVideoRef.current.srcObject = e.streams[0];
-      }
+      remoteVideoRef.current.srcObject = e.streams[0];
     };
 
     peer.onicecandidate = (e) => {
@@ -101,108 +97,100 @@ const VideoChat = ({ roomId, username }) => {
   };
 
   const handleAnswer = async ({ answer }) => {
-    await peerRef.current?.setRemoteDescription(new RTCSessionDescription(answer));
+    await peerRef.current.setRemoteDescription(new RTCSessionDescription(answer));
   };
 
   const handleNewICECandidateMsg = async ({ candidate }) => {
     try {
-      await peerRef.current?.addIceCandidate(new RTCIceCandidate(candidate));
+      await peerRef.current.addIceCandidate(new RTCIceCandidate(candidate));
     } catch (e) {
-      console.error("Error adding received ICE candidate", e);
+      console.error("Error adding ICE candidate", e);
     }
   };
 
   const toggleMic = () => {
     const audioTrack = localStreamRef.current.getAudioTracks()[0];
-    if (audioTrack) {
-      audioTrack.enabled = !audioTrack.enabled;
-      setMicOn(audioTrack.enabled);
-    }
+    audioTrack.enabled = !audioTrack.enabled;
+    setMicOn(audioTrack.enabled);
   };
 
   const toggleCamera = () => {
     const videoTrack = localStreamRef.current.getVideoTracks()[0];
-    if (videoTrack) {
-      videoTrack.enabled = !videoTrack.enabled;
-      setCamOn(videoTrack.enabled);
-    }
+    videoTrack.enabled = !videoTrack.enabled;
+    setCameraOn(videoTrack.enabled);
   };
 
-  const toggleScreenShare = async () => {
-    if (!sharingScreen) {
+  const handleScreenShare = async () => {
+    try {
       const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
       const screenTrack = screenStream.getVideoTracks()[0];
 
-      if (peerRef.current) {
-        const sender = peerRef.current.getSenders().find((s) => s.track.kind === "video");
-        if (sender) sender.replaceTrack(screenTrack);
+      if (!peerRef.current) {
+        console.warn("No peer connection available");
+        return;
       }
 
-      screenTrack.onended = () => {
-        stopScreenShare();
-      };
-
-      localVideoRef.current.srcObject = screenStream;
-      screenTrackRef.current = screenTrack;
-      setSharingScreen(true);
-    } else {
-      stopScreenShare();
+      const sender = peerRef.current.getSenders().find(s => s.track?.kind === "video");
+      if (sender) {
+        sender.replaceTrack(screenTrack);
+      } else {
+        console.warn("No video sender found to replace");
+      }
+    } catch (error) {
+      console.error("Error during screen sharing:", error);
     }
-  };
-
-  const stopScreenShare = () => {
-    const videoTrack = localStreamRef.current.getVideoTracks()[0];
-    if (peerRef.current) {
-      const sender = peerRef.current.getSenders().find((s) => s.track.kind === "video");
-      if (sender) sender.replaceTrack(videoTrack);
-    }
-    localVideoRef.current.srcObject = localStreamRef.current;
-    setSharingScreen(false);
   };
 
   return (
-    <div className="flex flex-col items-center gap-4 p-4">
-      <h2 className="text-xl font-bold">Video Chat Room: {roomId}</h2>
-      <div className="flex flex-wrap justify-center gap-4">
-        <video
-          ref={localVideoRef}
-          autoPlay
-          muted
-          playsInline
-          className="rounded-xl w-64 h-48 border shadow"
-        />
-        <video
-          ref={remoteVideoRef}
-          autoPlay
-          playsInline
-          className="rounded-xl w-64 h-48 border shadow"
-        />
-      </div>
+    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100 p-4">
+      <div className="w-full max-w-5xl bg-white shadow-xl rounded-xl flex flex-col md:flex-row">
+        <div className="w-full md:w-2/3 p-4 relative bg-gray-900 rounded-xl">
+          {cameraOn ? (
+            <video ref={localVideoRef} autoPlay muted className="w-full h-96 rounded-xl object-cover" />
+          ) : (
+            <div className="w-full h-1/2 flex items-center justify-center text-white">Camera is off</div>
+          )}
+          <video ref={remoteVideoRef} autoPlay className="w-full h-96 mt-4 rounded-xl object-cover" />
+          <div className="absolute bottom-4 left-4 flex space-x-4">
+            <button onClick={toggleMic} className="bg-gray-800 text-white px-4 py-2 rounded-full">
+              {micOn ? "Mute Mic" : "Unmute Mic"}
+            </button>
+            <button onClick={toggleCamera} className="bg-gray-800 text-white px-4 py-2 rounded-full">
+              {cameraOn ? "Turn Off Camera" : "Turn On Camera"}
+            </button>
+            <button onClick={handleScreenShare} className="bg-blue-600 text-white px-4 py-2 rounded-full">
+              Share Screen
+            </button>
+          </div>
+        </div>
+        <div className="w-full md:w-1/3 p-6">
+          <h2 className="text-xl font-semibold mb-4">Join Room</h2>
+          <input
+            value={roomId}
+            onChange={(e) => setRoomId(e.target.value)}
+            className="w-full border border-gray-400 px-4 py-2 rounded mb-4"
+          />
+          <button
+            onClick={() => navigate(`/call?roomID=${roomId}`)}
+            className="w-full bg-blue-600 text-white px-4 py-2 rounded mb-6"
+          >
+            Join
+          </button>
 
-      <div className="mt-4 flex gap-4">
-        <button
-          onClick={toggleMic}
-          className={`px-4 py-2 rounded-full text-white ${micOn ? "bg-green-600" : "bg-red-600"}`}
-        >
-          {micOn ? "Mic On 🎙" : "Mic Off 🔇"}
-        </button>
-
-        <button
-          onClick={toggleCamera}
-          className={`px-4 py-2 rounded-full text-white ${camOn ? "bg-green-600" : "bg-red-600"}`}
-        >
-          {camOn ? "Camera On 📷" : "Camera Off 🚫"}
-        </button>
-
-        <button
-          onClick={toggleScreenShare}
-          className={`px-4 py-2 rounded-full text-white ${sharingScreen ? "bg-yellow-500" : "bg-blue-600"}`}
-        >
-          {sharingScreen ? "Stop Sharing 🛑" : "Share Screen 🖥"}
-        </button>
+          <h3 className="text-lg font-semibold mb-2">Share the link</h3>
+          <div className="bg-gray-100 p-4 rounded flex items-center justify-between">
+            <div className="text-sm text-gray-800 break-all">{shareableLink}</div>
+            <button
+              onClick={() => navigator.clipboard.writeText(shareableLink)}
+              className="text-blue-600 hover:underline ml-2"
+            >
+              Copy
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );
 };
 
-export default VideoChat;
+export default MeetRoom;
