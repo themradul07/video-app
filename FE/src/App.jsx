@@ -1,17 +1,15 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import VideoChat from './Pages/VideoChat';
-import MeetRoom from './Pages/MeetRoom';
 
 function App() {
-
   return (
-     <Router>
+    <Router>
       <Routes>
         <Route path="/" element={<VideoChat />} />
-        <Route path="/call" element={<MeetRoom />} />
+        <Route path="/call" element={<VideoChat />} />
       </Routes>
     </Router>
-  )
+  );
 }
 
-export default App
+export default App;

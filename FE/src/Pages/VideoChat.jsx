@@ -5,29 +5,33 @@ import io from "socket.io-client";
 
 const socket = io("http://localhost:5000");
 
-const MeetRoom = () => {
+const VideoChat = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const queryParams = new URLSearchParams(location.search);
   const incomingRoomID = queryParams.get("roomID");
-
+  const peerRef = useRef(null);
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
-  const peerRef = useRef(null);
   const localStreamRef = useRef(null);
+  const peersRef = useRef({});
 
   const [roomId, setRoomId] = useState(incomingRoomID || uuidv4());
   const [shareableLink, setShareableLink] = useState("");
   const [cameraOn, setCameraOn] = useState(true);
   const [micOn, setMicOn] = useState(true);
+  const [joined, setJoined] = useState(false);
 
   useEffect(() => {
     setShareableLink(`${window.location.origin}/call?roomID=${roomId}`);
+  }, [roomId]);
 
-    if (incomingRoomID) {
+  useEffect(() => {
+    if (incomingRoomID && !joined) {
       startMeeting();
     }
-  }, [roomId]);
+  }, [incomingRoomID, joined]);
+
 
   const startMeeting = async () => {
     try {
@@ -35,23 +39,36 @@ const MeetRoom = () => {
       localStreamRef.current = stream;
       localVideoRef.current.srcObject = stream;
 
-      socket.emit("join-room", roomId);
-
+      socket.emit("join-room", { roomId, userId: socket.id });
       socket.on("user-joined", handleUserJoined);
       socket.on("offer", handleOffer);
       socket.on("answer", handleAnswer);
       socket.on("ice-candidate", handleNewICECandidateMsg);
+      setJoined(true);
     } catch (err) {
       console.error("Error accessing media devices:", err);
       alert("Please allow access to your camera and microphone.");
     }
   };
 
-  const handleUserJoined = async (id) => {
-    const peer = createPeer(id);
-    peerRef.current = peer;
-    localStreamRef.current.getTracks().forEach(track => peer.addTrack(track, localStreamRef.current));
-  };
+  useEffect(() => {
+    socket.on("receive-message", ({ sender, message }) => {
+      setChatMessages((prev) => [...prev, { sender, message }]);
+    });
+  }, []);
+
+
+const handleUserJoined = async (id) => {
+  if (peersRef.current[id]) return;
+
+  const peer = createPeer(id);
+  peersRef.current[id] = peer;
+
+  localStreamRef.current.getTracks().forEach(track =>
+    peer.addTrack(track, localStreamRef.current)
+  );
+};
+
 
   const createPeer = (userIdToCall) => {
     const peer = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
@@ -120,26 +137,6 @@ const MeetRoom = () => {
     setCameraOn(videoTrack.enabled);
   };
 
-  const handleScreenShare = async () => {
-    try {
-      const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
-      const screenTrack = screenStream.getVideoTracks()[0];
-
-      if (!peerRef.current) {
-        console.warn("No peer connection available");
-        return;
-      }
-
-      const sender = peerRef.current.getSenders().find(s => s.track?.kind === "video");
-      if (sender) {
-        sender.replaceTrack(screenTrack);
-      } else {
-        console.warn("No video sender found to replace");
-      }
-    } catch (error) {
-      console.error("Error during screen sharing:", error);
-    }
-  };
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100 p-4">
@@ -158,9 +155,6 @@ const MeetRoom = () => {
             <button onClick={toggleCamera} className="bg-gray-800 text-white px-4 py-2 rounded-full">
               {cameraOn ? "Turn Off Camera" : "Turn On Camera"}
             </button>
-            <button onClick={handleScreenShare} className="bg-blue-600 text-white px-4 py-2 rounded-full">
-              Share Screen
-            </button>
           </div>
         </div>
         <div className="w-full md:w-1/3 p-6">
@@ -171,11 +165,12 @@ const MeetRoom = () => {
             className="w-full border border-gray-400 px-4 py-2 rounded mb-4"
           />
           <button
-            onClick={() => navigate(`/call?roomID=${roomId}`)}
+            onClick={startMeeting}
             className="w-full bg-blue-600 text-white px-4 py-2 rounded mb-6"
           >
             Join
           </button>
+
 
           <h3 className="text-lg font-semibold mb-2">Share the link</h3>
           <div className="bg-gray-100 p-4 rounded flex items-center justify-between">
@@ -193,4 +188,4 @@ const MeetRoom = () => {
   );
 };
 
-export default MeetRoom;
+export default VideoChat;
