@@ -110,7 +110,7 @@ const MeetRoom = () => {
   
       // Initialize socket connection
       if (!socketRef.current) {
-        socketRef.current = io('http://localhost:5000');
+        socketRef.current = io(`${import.meta.env.VITE_BASE_URL}`);
         
       socketRef.current.on('ice-candidate', ({ candidate, targetId }) => {
         console.log(`Received ICE candidate for ${targetId}`);

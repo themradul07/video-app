@@ -5,6 +5,11 @@ import polyfillNode from 'rollup-plugin-polyfill-node';
 
 export default defineConfig({
   plugins: [tailwindcss(),react()],
+//   server: {
+//     allowedHosts: [
+//       'c803-47-15-42-42.ngrok-free.app', // Add your new ngrok host here
+//     ],
+// },
   optimizeDeps: {
     include: ['buffer', 'process', 'util', 'stream'],
   },

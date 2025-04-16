@@ -11,7 +11,7 @@ export default function CreateMeet() {
 
   const handleCreate = async () => {
     try {
-      const res = await axios.post('http://localhost:5000/api/meet/create', {
+      const res = await axios.post(`${import.meta.env.VITE_BASE_URL}/api/meet/create`, {
         display_name: displayName,
         camera_enabled: camera,
         mic_enabled: mic,
