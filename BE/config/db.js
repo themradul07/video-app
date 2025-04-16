@@ -5,28 +5,28 @@ dotenv.config();
 
 // Initialize Sequelize
 const sequelize = new Sequelize(
-  process.env.DB_NAME,     // Database name
-  process.env.DB_USER,     // DB username
-  process.env.DB_PASSWORD, // DB password
+  process.env.DB_NAME,    
+  process.env.DB_USER,     
+  process.env.DB_PASSWORD,
   {
-    host: process.env.DB_HOST || "localhost",
+    host: process.env.DB_HOST,
     dialect: "mysql",
-    logging: false, // set to true to log raw SQL queries
+    logging: false, 
   }
 );
 
-// Connect and sync DB
+
 const connectDB = async () => {
   try {
     await sequelize.authenticate();
     console.log("✅ MySQL connected via Sequelize.");
 
     // Sync models
-    await sequelize.sync({ alter: true }); // for dev, use alter; for fresh db use force:true
+    await sequelize.sync({ alter: true });
     console.log("✅ Models synced.");
   } catch (error) {
     console.error("❌ Unable to connect to the database:", error);
-    process.exit(1); // stop the server
+    process.exit(1);
   }
 };
 
