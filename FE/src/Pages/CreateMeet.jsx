@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import image from "../assets/bg2.jpg";
 
 export default function CreateMeet() {
   const [displayName, setDisplayName] = useState('');
@@ -34,33 +35,60 @@ export default function CreateMeet() {
 
 
   return (
-    <div className="flex flex-col items-center justify-center h-screen space-y-4">
-      <h2 className="text-2xl font-semibold">Create Meet</h2>
-      <input
-        type="text"
-        placeholder="Enter display name"
-        value={displayName}
-        onChange={(e) => setDisplayName(e.target.value)}
-        className="border px-4 py-2 rounded"
-      />
-      <div className="space-x-4">
-        <label>
-          <input type="checkbox" checked={camera} onChange={() => setCamera(!camera)} />
-          Camera
-        </label>
-        <label>
-          <input type="checkbox" checked={mic} onChange={() => setMic(!mic)} />
-          Mic
-        </label>
-      </div>
-      <button
-        className="bg-blue-600 text-white px-6 py-2 rounded"
-        onClick={handleCreate}
-      >
-        Create and Join
-      </button>
+    <div className="relative w-full h-screen bg-cover bg-center"  
+     style={{
+          backgroundImage: `url(${image})`,
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+          backgroundRepeat: "no-repeat",
+        }}>
+      <div className="absolute inset-0 opacity-60"></div>
 
-      
+      <div className="relative z-10 flex flex-col items-center justify-center h-full px-4 text-white space-y-8">
+        <div className="text-center max-w-xl">
+          <h1 className="text-4xl sm:text-5xl font-bold mb-4">Set Up Your Meeting</h1>
+          <p className="text-lg sm:text-xl">
+            Prepare to connect with others. Enable your camera and mic, and choose a display name to get started.
+          </p>
+        </div>
+
+        <div className="bg-white/90 text-black bg-opacity-10 backdrop-blur-md p-8 rounded-xl shadow-xl w-full max-w-md space-y-6">
+          <h2 className="text-2xl font-semibold text-center">Create Meet</h2>
+          <input
+            type="text"
+            placeholder="Enter display name"
+            value={displayName}
+            onChange={(e) => setDisplayName(e.target.value)}
+            className="w-full border border-black bg-[#e3e3ed] placeholder-gray-500 px-4 py-2 rounded focus:outline-none focus:ring-2 focus:ring-blue-400"
+          />
+          <div className="flex items-center justify-center space-x-6">
+            <label className="flex items-center space-x-2">
+              <input
+                type="checkbox"
+                checked={camera}
+                onChange={() => setCamera(!camera)}
+                className="accent-blue-600"
+              />
+              <span>Camera</span>
+            </label>
+            <label className="flex items-center space-x-2">
+              <input
+                type="checkbox"
+                checked={mic}
+                onChange={() => setMic(!mic)}
+                className="accent-green-600"
+              />
+              <span>Mic</span>
+            </label>
+          </div>
+          <button
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 rounded-lg transition duration-200"
+            onClick={handleCreate}
+          >
+            Create and Join
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

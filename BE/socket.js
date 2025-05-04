@@ -9,14 +9,15 @@ function setupSocketIO(httpServer) {
   });
 
   const rooms = {};
-  const userMeta = {}; // Store socket.id => { displayName, roomId } mapping
+  const userMeta = {};
+  const mediaState = {};
 
   io.on('connection', (socket) => {
     console.log('User connected:', socket.id);
 
-    socket.on('join-room', ({ roomId, userId, displayName }) => {
+    socket.on('join-room', ({ roomId, userId, displayName, isCameraOn, isMicOn }) => {
       socket.join(roomId);
-      userMeta[socket.id] = { userId, displayName, roomId };
+      userMeta[socket.id] = { userId, displayName, roomId,  isCameraOn, isMicOn  };
     
       if (!rooms[roomId]) rooms[roomId] = [];
     
@@ -35,10 +36,11 @@ function setupSocketIO(httpServer) {
         callerID: socket.id,
         displayName,
         userId,
+        isCameraOn, 
+        isMicOn ,
       });
     });
     
-
     socket.on('sending-signal', payload => {
       console.log(`Server: forwarding signal from ${socket.id} to ${payload.userToSignal}`);
     
@@ -77,13 +79,25 @@ function setupSocketIO(httpServer) {
       });
     });
 
+    socket.on('media-toggle', ({ userId, mic, camera, screenSharing }) => {
+      const roomId = userMeta[socket.id]?.roomId;
+      if (!roomId) {
+        console.error(`Room ID not found for media-toggle from socket ${socket.id}`);
+        return;
+      }
+    
+      // Save media state
+      mediaState[userId] = { mic, camera, screenSharing };
+      socket.broadcast.emit('media-toggle', { userId, mic, camera, screenSharing });
+    });  
+
     socket.on('disconnect', () => {
       const roomId = userMeta[socket.id]?.roomId;
       
       if (roomId) {
         // Update your custom rooms object
         rooms[roomId] = rooms[roomId].filter(user => user.socketId !== socket.id);
-        // Broadcast user-left event
+        delete mediaState[socket.id];
         socket.to(roomId).emit('user-left', { userId: userMeta[socket.id]?.userId });
       }
       
