@@ -1,33 +1,35 @@
 const express = require("express");
+const dotenv = require("dotenv");
 const http = require("http");
 const cors = require("cors");
-const { Server } = require("socket.io");
-const db = require("./config/db");
-const socketHandler = require("./socket");
+const setupSocketIO = require("./socket")
+const {connectDB} = require("./config/db")
+const meetRoutes = require('./routes/meetRoutes');
+
+dotenv.config();
 
 const app = express();
-const server = http.createServer(app);
-const io = new Server(server, {
-  cors: {
-    origin: "*",
-    methods: ["GET", "POST"]
-  }
-});
+const PORT = process.env.PORT || 5000;
+
 
 app.use(cors());
 app.use(express.json());
+app.use('/api/meet', meetRoutes);
 
-// Connect DB
-(async () => {
-  try {
-    await db.sequelize.authenticate();
-    console.log("Database connected...");
-  } catch (err) {
-    console.error("DB connection failed:", err);
-  }
-})();
+app.get("/", (req, res) => {
+  res.send("API is running ✅");
+});
 
-// Initialize Socket.IO
-io.on("connection", (socket) => socketHandler(io, socket));
 
-server.listen(5000, () => console.log("Server running on http://localhost:5000"));
+const startServer = async () => {
+  await connectDB();
+
+  const server = http.createServer(app);
+  setupSocketIO(server); 
+
+  server.listen(PORT, () => {
+    console.log(`🚀 Server running on port ${PORT}`);
+  });
+};
+
+startServer();
