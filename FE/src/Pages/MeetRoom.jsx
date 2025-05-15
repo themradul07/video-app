@@ -6,6 +6,7 @@ import image from "../assets/bg2.jpg";
 import { FaMicrophone, FaMicrophoneSlash, FaVideo, FaVideoSlash } from "react-icons/fa";
 import { FiPhone } from "react-icons/fi";
 import { toast } from 'react-toastify';
+import { useNavigate } from 'react-router-dom';
 
 const MeetRoom = () => {
   const { roomId } = useParams();
@@ -24,6 +25,7 @@ const MeetRoom = () => {
   const [currentPage, setCurrentPage] = useState(0);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 640);
   const totalUsers = peers.length + (isMobile || currentPage === 0 ? 1 : 0);
+  const navigate = useNavigate();
 
   const getGridColumns = () => {
     if (isMobile) {
@@ -56,6 +58,32 @@ const MeetRoom = () => {
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, []);
+
+
+const handleLeaveCall = () => {
+  // Stop media tracks and clear references
+  if (streamRef.current) {
+    streamRef.current.getTracks().forEach(track => track.stop());
+    streamRef.current = null;
+  }
+  
+  // Clear video element reference
+  if (userVideo.current) {
+    userVideo.current.srcObject = null;
+  }
+
+  // Destroy peers
+  peersRef.current.forEach(({ peer }) => peer.destroy());
+  peersRef.current = [];
+
+  // Disconnect socket
+  if (socketRef.current) {
+    socketRef.current.disconnect();
+    socketRef.current = null;
+  }
+
+  navigate('/');
+};
 
   const getPagedPeers = () => {
     const pages = [];
@@ -381,17 +409,26 @@ const MeetRoom = () => {
     });
 
     return () => {
-      if (socketRef.current) {
-        socketRef.current.disconnect();
-      }
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach(track => track.stop());
-      }
-      peersRef.current.forEach(({ peer }) => peer.destroy());
+      
+    // Stop media tracks
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+    }
+
+    // Disconnect socket
+    if (socketRef.current) {
+      socketRef.current.disconnect();
+    }
+
+    // Clean peers
+    peersRef.current.forEach(p => p.peer.destroy());
+    peersRef.current = [];
+  
       setPeers([]);
       setParticipants([]);
       setRemoteMediaStates({});
-    };
+ };
+    
   }, [displayName, camera, mic, roomId]);
 
   return (
@@ -506,7 +543,7 @@ const MeetRoom = () => {
           {/* End Call */}
           <button
             className="p-3 rounded-full bg-red-600 hover:bg-red-700 transition focus:outline-none focus:ring-2 focus:ring-red-400"
-          >
+           onClick={handleLeaveCall} >
             <FiPhone className="w-6 h-6 text-white" />
           </button>
   
