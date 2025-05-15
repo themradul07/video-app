@@ -2,6 +2,10 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useParams, useLocation } from 'react-router-dom';
 import { io } from 'socket.io-client';
 import Peer from 'simple-peer/simplepeer.min.js';
+import image from "../assets/bg2.jpg";
+import { FaMicrophone, FaMicrophoneSlash, FaVideo, FaVideoSlash } from "react-icons/fa";
+import { FiPhone } from "react-icons/fi";
+import { toast } from 'react-toastify';
 
 const MeetRoom = () => {
   const { roomId } = useParams();
@@ -14,10 +18,72 @@ const MeetRoom = () => {
   const peersRef = useRef([]);
   const socketRef = useRef();
   const streamRef = useRef();
-  const [isMicOn, setIsMicOn] = useState(true);
-  const [isCameraOn, setIsCameraOn] = useState(true);
-  const [isScreenSharing, setIsScreenSharing] = useState(false);
+  const [micOn, setMicOn] = useState(true);
+  const [videoOn, setVideoOn] = useState(true);
   const [remoteMediaStates, setRemoteMediaStates] = useState({});
+  const [currentPage, setCurrentPage] = useState(0);
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 640);
+  const totalUsers = peers.length + (isMobile || currentPage === 0 ? 1 : 0);
+
+  const getGridColumns = () => {
+    if (isMobile) {
+      if (totalUsers <= 2) return 'repeat(1, 1fr)';
+      if (totalUsers <= 4) return 'repeat(2, 1fr)';
+    }
+  
+    if (totalUsers === 1) return 'repeat(1, 1fr)';
+    if (totalUsers === 2) return 'repeat(2, 1fr)';
+    if (totalUsers <= 4) return 'repeat(2, 1fr)';
+    if (totalUsers <= 6) return 'repeat(3, 1fr)';
+  
+    return 'repeat(3, 1fr)';
+  };   
+
+  const getGridRows = () => {
+    if (isMobile) {
+      if (totalUsers <= 2) return 'repeat(1, 1fr)';
+      return 'repeat(2, 1fr)'; // force 2 rows
+    }
+  
+    return 'auto';
+  };  
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 640);
+    };
+  
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  const getPagedPeers = () => {
+    const pages = [];
+  
+    if (isMobile) {
+      // Phone view: 3 peers per page (self is always included)
+      for (let i = 0; i < peers.length; i += 3) {
+        pages.push(peers.slice(i, i + 3));
+      }
+    } else {
+      // Laptop view
+      if (peers.length <= 5) {
+        pages.push(peers); // All peers fit on first page
+      } else {
+        // First page: self + first 5 peers
+        pages.push(peers.slice(0, 5));
+        // Next pages: 6 peers per page (self not included)
+        for (let i = 5; i < peers.length; i += 6) {
+          pages.push(peers.slice(i, i + 6));
+        }
+      }
+    }
+  
+    return pages;
+  };     
+
+  const peerPages = getPagedPeers();
+  const currentPeers = peerPages[currentPage] || [];
 
   const toggleMic = () => {
     const audioTrack = streamRef.current?.getAudioTracks()[0];
@@ -32,7 +98,6 @@ const MeetRoom = () => {
         userId: socketRef.current.id,
         mic: audioTrack.enabled,
         camera: videoTrack?.enabled ?? false,
-        screenSharing: isScreenSharing
       });
     }
   };
@@ -40,99 +105,21 @@ const MeetRoom = () => {
   const toggleCamera = () => {
     const videoTrack = streamRef.current?.getVideoTracks()[0];
     const audioTrack = streamRef.current?.getAudioTracks()[0];
-  
+
     const isCurrentlyOn = videoTrack?.enabled ?? false;
     const newCameraState = !isCurrentlyOn;
-  
+
     if (videoTrack) {
       videoTrack.enabled = newCameraState;
     }
-  
+
     setIsCameraOn(newCameraState);
-  
+
     socketRef.current?.emit('media-toggle', {
       userId: socketRef.current.id,
       mic: audioTrack?.enabled ?? false,
       camera: newCameraState,
-      screenSharing: isScreenSharing,
     });
-  };
-  
-
-
-  const toggleScreenShare = async () => {
-    if (!isScreenSharing) {
-      try {
-        const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
-        const screenTrack = screenStream.getVideoTracks()[0];
-
-        // Replace video track in peer connections
-        peersRef.current.forEach(({ peer }) => {
-          const sender = peer._pc.getSenders().find(s => s.track?.kind === 'video');
-          if (sender) sender.replaceTrack(screenTrack);
-        });
-
-        // Replace video track in our own stream
-        const oldTrack = streamRef.current.getVideoTracks()[0];
-        streamRef.current.removeTrack(oldTrack);
-        streamRef.current.addTrack(screenTrack);
-
-        if (userVideo.current) {
-          userVideo.current.srcObject = streamRef.current;
-        }
-
-        screenTrack.onended = () => {
-          stopScreenShare();
-        };
-
-        setIsScreenSharing(true);
-        const audioTrack = streamRef.current?.getAudioTracks()[0];
-        const videoTrack = streamRef.current?.getVideoTracks()[0];
-
-        socketRef.current?.emit('media-toggle', {
-          userId: socketRef.current.id,
-          mic: audioTrack?.enabled ?? false,
-          camera: videoTrack?.enabled ?? false,
-          screenSharing: true,
-        });
-      } catch (err) {
-        console.error("Error sharing screen:", err);
-      }
-    } else {
-      stopScreenShare();
-    }
-  };
-
-  const stopScreenShare = async () => {
-    try {
-      const videoStream = await navigator.mediaDevices.getUserMedia({ video: isCameraOn });
-      const videoTrack = videoStream.getVideoTracks()[0];
-
-      // Replace video track in peer connections
-      peersRef.current.forEach(({ peer }) => {
-        const sender = peer._pc.getSenders().find(s => s.track?.kind === 'video');
-        if (sender) sender.replaceTrack(videoTrack);
-      });
-
-      // Replace video track in our own stream
-      const oldTrack = streamRef.current.getVideoTracks()[0];
-      streamRef.current.removeTrack(oldTrack);
-      streamRef.current.addTrack(videoTrack);
-
-      if (userVideo.current) {
-        userVideo.current.srcObject = streamRef.current;
-      }
-
-      setIsScreenSharing(false);
-      socketRef.current?.emit('media-toggle', {
-        userId: socketRef.current.id,
-        mic: audioTrack.enabled,
-        camera: videoTrack.enabled, // ✅ real-time
-        screenSharing: false
-      });
-    } catch (err) {
-      console.error("Failed to revert to camera after screen share:", err);
-    }
   };
 
   const createPeer = (userToSignal, callerID, stream) => {
@@ -142,7 +129,7 @@ const MeetRoom = () => {
     const existingPeer = peersRef.current.find(p => p.peerID === userToSignal);
     if (existingPeer) {
       console.warn(`Peer already exists for user ${userToSignal}`);
-      return existingPeer.peer; // Return existing peer instead of null
+      return existingPeer.peer;
     }
 
     try {
@@ -155,8 +142,8 @@ const MeetRoom = () => {
             { urls: 'stun:stun.l.google.com:19302' },
             { urls: 'stun:stun1.l.google.com:19302' },
             { urls: 'stun:stun2.l.google.com:3478' },
-            // { urls: 'stun:stun.voip.a телефон.de' }
             { urls: 'stun:stun.voip.aql.com' },
+            { urls: 'stun:stun.voiparound.com' },
             // {
             //   urls: 'turn:0.tcp.in.ngrok.io:18481?transport=tcp',
             //   username: 'testuser',
@@ -195,8 +182,8 @@ const MeetRoom = () => {
           { urls: 'stun:stun.l.google.com:19302' },
           { urls: 'stun:stun1.l.google.com:19302' },
           { urls: 'stun:stun2.l.google.com:3478' },
-          // { urls: 'stun:stun.voip.a телефон.de' }
           { urls: 'stun:stun.voip.aql.com' },
+          { urls: 'stun:stun.voiparound.com' },
           // {
           //   urls: 'turn:0.tcp.in.ngrok.io:18481?transport=tcp',
           //   username: 'testuser',
@@ -272,15 +259,15 @@ const MeetRoom = () => {
             userId: socketRef.current.id,
             mic: audioTrack?.enabled ?? false,
             camera: videoTrack?.enabled ?? false,
-            screenSharing: true,
-          });          
+
+          });
         });
 
-        socketRef.current.on('media-toggle', ({ userId, mic, camera, screenSharing }) => {
-          console.log(`📡 Media status from ${userId}: mic=${mic}, camera=${camera}, screen=${screenSharing}`);
+        socketRef.current.on('media-toggle', ({ userId, mic, camera }) => {
+          console.log(`📡 Media status from ${userId}: mic=${mic}, camera=${camera}`);
           setRemoteMediaStates(prev => ({
             ...prev,
-            [userId]: { mic, camera, screenSharing }
+            [userId]: { mic, camera }
           }));
           if (userId === socketRef.current.id) {
             const localAudioTrack = streamRef.current?.getAudioTracks()[0];
@@ -314,17 +301,17 @@ const MeetRoom = () => {
 
         socketRef.current.on('user-joined', payload => {
           const { callerID, displayName, isCameraOn, isMicOn } = payload;
-        
+
           // Add duplicate check
           if (peersRef.current.some(p => p.peerID === callerID)) return;
-        
+
           const peer = createPeer(callerID, socketRef.current.id, streamRef.current);
-        
+
           if (!peer) {
             console.error("Peer creation failed for", callerID);
             return;
           }
-        
+
           peersRef.current.push({
             peerID: callerID,
             peer,
@@ -332,11 +319,11 @@ const MeetRoom = () => {
             isCameraOn,
             isMicOn
           });
-        
+
           // Functional update to avoid stale state
           setPeers(prev => [...prev, { peer, displayName, isCameraOn, isMicOn }]);
         });
-        
+
 
         socketRef.current.on('sending-signal', payload => {
           // Check if peer already exists
@@ -407,44 +394,61 @@ const MeetRoom = () => {
     };
   }, [displayName, camera, mic, roomId]);
 
-
   return (
-    <div className="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 min-h-screen bg-gray-100">
-      {/* Self Video */}
-      <div className="relative w-full aspect-video rounded overflow-hidden bg-black">
-        <video
-          muted
-          ref={userVideo}
-          autoPlay
-          playsInline
-          className="w-full h-full object-cover"
-        />
-        <div className="absolute bottom-2 left-2 bg-black/60 text-white text-sm px-2 py-1 rounded">
-          {displayName || 'You'}
-
-          <div className="flex gap-4 justify-center mt-4">
-            <button onClick={toggleMic} className="px-4 py-2 bg-gray-700 text-white rounded">
-              {isMicOn ? 'Mute Mic' : 'Unmute Mic'}
-            </button>
-            <button onClick={toggleCamera} className="px-4 py-2 bg-gray-700 text-white rounded">
-              {isCameraOn ? 'Turn Off Camera' : 'Turn On Camera'}
-            </button>
-            <button onClick={toggleScreenShare} className="px-4 py-2 bg-blue-600 text-white rounded">
-              {isScreenSharing ? 'Stop Screen Share' : 'Start Screen Share'}
-            </button>
-          </div>
-
+    <div
+      className="flex flex-col h-screen w-full"
+      style={{
+        backgroundImage: `url(${image})`,
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+        backgroundRepeat: "no-repeat",
+      }}
+    >
+<div
+  className="grid gap-4 justify-center items-center"
+  style={{
+    height: 'calc(100vh - 80px)',
+    gridTemplateColumns: getGridColumns(),
+    gridTemplateRows: getGridRows(),
+  }}
+>
+  {/* Self Video */}
+  {(isMobile || currentPage === 0) && (
+  <div className="relative w-full aspect-video h-full rounded overflow-hidden bg-black shadow-lg">
+    <video
+      muted
+      ref={userVideo}
+      autoPlay
+      playsInline
+      className="w-full h-full object-cover"
+    />
+    <div className="absolute bottom-2 left-2 bg-black/60 text-white text-sm px-3 py-1">
+      {displayName || "You"}
+    </div>
+  </div>
+)}
+  {/* Peers */}
+  {currentPeers.map((peerObj, index) => (
+    <Video key={index} peer={peerObj.peer} name={peerObj.displayName} />
+  ))}
+</div>
+  
+      {/* Pagination */}
+      {peerPages.length > 1 && (
+        <div className="flex justify-center mt-2">
+          {peerPages.map((_, index) => (
+            <button
+              key={index}
+              onClick={() => setCurrentPage(index)}
+              className={`w-3 h-3 mx-1 rounded-full ${index === currentPage ? "bg-white" : "bg-gray-400"}`}
+            />
+          ))}
         </div>
-
-      </div>
-
-      {/* Peers */}
-      {peers.map((peerObj, index) => (
-        <Video key={index} peer={peerObj.peer} name={peerObj.displayName} />
-      ))}
-
+      )}
+  
+      {/* Invite Modal */}
       {showInviteModal && (
-        <div className="fixed bottom-6 right-6 z-50">
+        <div className="fixed bottom-1 sm:bottom-1 right-4 z-50">
           <div className="bg-white shadow-xl border rounded-xl p-4 w-72 relative">
             <button
               onClick={() => setShowInviteModal(false)}
@@ -462,7 +466,7 @@ const MeetRoom = () => {
             <button
               onClick={() => {
                 navigator.clipboard.writeText(`${window.location.origin}/join/${roomId}`);
-                alert('Link copied to clipboard!');
+                toast.success("Link copied to clipboard!");
               }}
               className="bg-blue-500 text-white text-sm px-3 py-1 rounded w-full"
             >
@@ -471,11 +475,52 @@ const MeetRoom = () => {
           </div>
         </div>
       )}
-
+  
+      {/* Bottom Taskbar */}
+      <div className="h-[80px] w-full flex justify-center items-center bg-black bg-opacity-90 z-40">
+      <div className="flex flex-wrap items-center gap-4 px-6 py-4 shadow-2xl w-full sm:max-w-xl justify-center">
+          {/* Mic */}
+          <button
+            onClick={() => setMicOn((prev) => !prev)}
+            className="p-3 rounded-full bg-gray-700 hover:bg-gray-600 transition group focus:outline-none focus:ring-2 focus:ring-blue-400"
+          >
+            {micOn ? (
+              <FaMicrophone className="w-6 h-6 text-white group-hover:text-red-400" />
+            ) : (
+              <FaMicrophoneSlash className="w-6 h-6 text-white group-hover:text-red-400" />
+            )}
+          </button>
+  
+          {/* Camera */}
+          <button
+            onClick={() => setVideoOn((prev) => !prev)}
+            className="p-3 rounded-full bg-gray-700 hover:bg-gray-600 transition group focus:outline-none focus:ring-2 focus:ring-blue-400"
+          >
+            {videoOn ? (
+              <FaVideo className="w-6 h-6 text-white group-hover:text-yellow-400" />
+            ) : (
+              <FaVideoSlash className="w-6 h-6 text-white group-hover:text-yellow-400" />
+            )}
+          </button>
+  
+          {/* End Call */}
+          <button
+            className="p-3 rounded-full bg-red-600 hover:bg-red-700 transition focus:outline-none focus:ring-2 focus:ring-red-400"
+          >
+            <FiPhone className="w-6 h-6 text-white" />
+          </button>
+  
+          {/* Invite Toggle */}
+          <button
+            onClick={() => setShowInviteModal((prev) => !prev)}
+            className="text-sm text-white hover:underline ml-4"
+          >
+            {showInviteModal ? "Hide Invite" : "Show Invite"}
+          </button>
+        </div>
+      </div>
     </div>
-
-
-  );
+  ); 
 };
 
 const Video = ({ peer, name }) => {
@@ -483,7 +528,6 @@ const Video = ({ peer, name }) => {
   const [hasStream, setHasStream] = useState(false);
 
   useEffect(() => {
-    // Function to set video stream and update state
     const setVideoStream = (stream) => {
       if (ref.current) {
         ref.current.srcObject = stream;
@@ -491,13 +535,11 @@ const Video = ({ peer, name }) => {
       }
     };
 
-    // Handler for new streams
     const handleStream = (stream) => {
       console.log("🔁 Received remote stream", stream);
       setVideoStream(stream);
     };
 
-    // Check if peer already has streams (might already have stream)
     if (peer.streams && peer.streams.length > 0) {
       console.log("Using existing peer stream:", peer.streams[0].id);
       setVideoStream(peer.streams[0]);
@@ -505,7 +547,6 @@ const Video = ({ peer, name }) => {
 
     peer.on('stream', handleStream);
 
-    // Add event listener for when video starts playing
     const videoElement = ref.current;
     if (videoElement) {
       const handleCanPlay = () => setHasStream(true);
@@ -526,30 +567,23 @@ const Video = ({ peer, name }) => {
   }, [peer]);
 
 
-
   return (
-    <div className="relative w-full aspect-video rounded overflow-hidden bg-black">
+    <div className="relative w-full h-full rounded overflow-hidden bg-black shadow-md">
       <video
         ref={ref}
         autoPlay
         playsInline
         className="w-full h-full object-cover"
-        onLoadedData={() => setHasStream(true)}
       />
-      <div className="absolute bottom-2 left-2 bg-black/60 text-white text-sm px-2 py-1 rounded">
+      <div className="absolute bottom-2 left-2 bg-black/60 text-white text-sm px-3 py-1 rounded">
         {name}
       </div>
       {!hasStream && (
-        <div className="absolute inset-0 flex items-center justify-center">
-          <div className="bg-black/70 text-white px-3 py-1 rounded">
-            Connecting...
-          </div>
+        <div className="absolute inset-0 flex items-center justify-center bg-black/70 text-white">
+          Connecting...
         </div>
       )}
     </div>
   );
 };
-
-
-
 export default MeetRoom;

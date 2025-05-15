@@ -79,7 +79,7 @@ function setupSocketIO(httpServer) {
       });
     });
 
-    socket.on('media-toggle', ({ userId, mic, camera, screenSharing }) => {
+    socket.on('media-toggle', ({ userId, mic, camera}) => {
       const roomId = userMeta[socket.id]?.roomId;
       if (!roomId) {
         console.error(`Room ID not found for media-toggle from socket ${socket.id}`);
@@ -87,8 +87,8 @@ function setupSocketIO(httpServer) {
       }
     
       // Save media state
-      mediaState[userId] = { mic, camera, screenSharing };
-      socket.broadcast.emit('media-toggle', { userId, mic, camera, screenSharing });
+      mediaState[userId] = { mic, camera };
+      socket.broadcast.emit('media-toggle', { userId, mic, camera });
     });  
 
     socket.on('disconnect', () => {
