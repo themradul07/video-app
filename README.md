@@ -103,5 +103,3 @@ Visit: http://localhost:3000/room/{roomId} to create or join a room.
 ![Screenshot 2025-07-02 150409](https://github.com/user-attachments/assets/caba1a69-9598-4f4a-bf2b-a6e7e7192671)
 
 ![Screenshot 2025-07-02 152247](https://github.com/user-attachments/assets/a670d56e-c486-4536-859a-f1d907e89880)
-
-Let me know if you want this tailored to a GitHub-style project, or if you'd like to include screenshots, video demo, or environment setup instructions.
