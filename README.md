@@ -78,7 +78,7 @@ This project is a real-time video chat application built with **React**, **Socke
 
 ### 1. Start Backend (Node.js + Socket.io server)
 ```bash
-cd server
+cd BE
 npm install
 npm run dev
 ```
@@ -94,5 +94,14 @@ Visit: http://localhost:3000/room/{roomId} to create or join a room.
 
 
 ---
+### Images of Website
+
+![Screenshot 2025-07-02 150214](https://github.com/user-attachments/assets/dfd6fc61-19c9-4b71-9eb7-bbd8f47e5e61)
+
+![Screenshot 2025-07-02 150313](https://github.com/user-attachments/assets/8c4f3590-203d-461a-99da-6163a79ce1b0)
+
+![Screenshot 2025-07-02 150409](https://github.com/user-attachments/assets/caba1a69-9598-4f4a-bf2b-a6e7e7192671)
+
+![Screenshot 2025-07-02 152247](https://github.com/user-attachments/assets/a670d56e-c486-4536-859a-f1d907e89880)
 
 Let me know if you want this tailored to a GitHub-style project, or if you'd like to include screenshots, video demo, or environment setup instructions.
