@@ -5,16 +5,19 @@ dotenv.config();
 
 // Initialize Sequelize
 const sequelize = new Sequelize(
-  process.env.DB_NAME,    
-  process.env.DB_USER,     
+  process.env.DB_NAME,
+  process.env.DB_USER,
   process.env.DB_PASSWORD,
   {
     host: process.env.DB_HOST,
     dialect: "mysql",
-    logging: false, 
+    logging: false,
   }
 );
 
+sequelize.sync({ alter: true }) // or { force: true } for dropping and recreating
+  .then(() => console.log('✅ Tables created'))
+  .catch(err => console.error('❌ Table creation failed:', err));
 
 const connectDB = async () => {
   try {
